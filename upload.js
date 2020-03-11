@@ -1,37 +1,47 @@
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
 const sharp = require('sharp');
 
 const app = express();
 
-const upload = multer({
-  dest: 'images/',
-  fileFilter: (req, file, cb) => {
-    if (!file.originalname.match(/\.(jpg|png|jpeg)$/)) {
-      return cb(new Error("Please upload an image"));
-    }
-
-    console.log(file);
-    
-    if (file.size > 800000 /* 800 kilo */) {
-      return cb(new Error("Image size should not be more than 800 kilobyte"), false);
-    }
-
-    cb(undefined, true);
-  }
-});
+const upload = multer({ dest: 'images/' });
 
 app.post('/upload', upload.single('upload'), (req, res) => {
-  // console.log(req.file);
-  
-  sharp("images/" + req.file.filename)
-    .toFile("images/" + req.file.filename + ".png", function (err, data) {
-      // console.log(data);
-      // if (err)
-      //   console.log(err);
-    });
+  const file = req.file;
 
-  res.send("File Uploaded successfully");
+  function renameFile() {
+    const oldPath = file.path;
+    const dot = file.originalname.indexOf('.');
+    const imageExtension = file.originalname.substring(dot);
+
+    fs.renameSync(oldPath, (oldPath + imageExtension))
+  }
+  
+  if (!file) {
+    throw new Error("File is required")
+  } else {
+    if (!file.originalname.match(/\.(png|jpg|jpeg|gif)$/)) {
+      fs.unlinkSync(file.path)
+      throw new Error('File must be an image')
+    }
+    if (file.size > 800000 /* 800 kilo */) {
+      fs.unlinkSync(file.path)
+      throw new Error("Image size should not be more than 800 kilobyte")
+    }
+    if (file.originalname.endsWith(".gif")) {
+      sharp("images/" + file.filename)
+        .toFormat('png')
+        .toFile("images/" + file.filename + ".png", function (err, data) {
+          renameFile();
+          fs.unlinkSync(file.path + ".gif");
+        });
+    } else {
+      renameFile();
+    }
+  }
+
+  return res.send("File Uploaded successfully");
 }, (error, req, res, next) => {
   res.status(400).send({ error: error.message })
 });
